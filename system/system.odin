@@ -5,42 +5,33 @@ import vk "vendor:vulkan"
 import    "core:mem"
 
 
-Members :: struct {
-	Window : glfw.WindowHandle,
-	Instance : vk.Instance,
-}
-
-m : Members
-
 WIDTH : i32 : 800
 HEIGHT : i32 : 600
+window : glfw.WindowHandle
+instance : vk.Instance
 
 run :: proc() {
 	initWindow()
 	initVulkan()
+	defer cleanUp()
 	mainLoop()
-	cleanUp()
 	return
 }
 
-
-@(private="file")
 initWindow :: proc() {
 	glfw.Init()
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
-	m.Window = glfw.CreateWindow(WIDTH, HEIGHT, "Vulkan", nil, nil)
-	assert(m.Window != nil, "glfwCreateWindow failed!")
+	window = glfw.CreateWindow(WIDTH, HEIGHT, "Vulkan", nil, nil)
+	assert(window != nil, "glfwCreateWindow failed!")
 	return
 }
 
-@(private="file")
 initVulkan :: proc() {
 	createInstance()
 	return
 }
 
-@(private)
 createInstance :: proc() {
 	// First we create the application info to be used in the create info
 	appInfo : vk.ApplicationInfo
@@ -58,30 +49,28 @@ createInstance :: proc() {
 	
 	extensions := glfw.GetRequiredInstanceExtensions()
 	glfwExtensionCount := u32(len(extensions))
-	glfwExtensions := mem.raw_data(extensions)
+	glfwExtensions : [^]cstring = mem.raw_data(extensions)
 
 	createInfo.enabledExtensionCount = glfwExtensionCount
 	createInfo.ppEnabledExtensionNames = glfwExtensions
 
 	createInfo.enabledLayerCount = 0
-	
-	assert(vk.CreateInstance(&createInfo, nil, &m.Instance) != vk.Result.SUCCESS, "vkCreateInstance failed!")
+
+	assert(vk.CreateInstance(&createInfo, nil, &instance) != vk.Result.SUCCESS, "vkCreateInstance failed!")
 
 	return
 }
 
-@(private="file")
 mainLoop :: proc() {
-	for !glfw.WindowShouldClose(m.Window) {
+	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents()
 	}
 	return
 }
 
-@(private="file")
 cleanUp :: proc() {
-	vk.DestroyInstance(m.Instance, nil)
-	glfw.DestroyWindow(m.Window)
+	vk.DestroyInstance(instance, nil)
+	glfw.DestroyWindow(window)
 	glfw.Terminate()
 	return
 }
