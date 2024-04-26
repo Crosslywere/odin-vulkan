@@ -4,7 +4,6 @@ import    "vendor:glfw"
 import vk "vendor:vulkan"
 import    "core:mem"
 
-
 WIDTH : i32 : 800
 HEIGHT : i32 : 600
 window : glfw.WindowHandle
@@ -28,6 +27,7 @@ initWindow :: proc() {
 }
 
 initVulkan :: proc() {
+	vk.load_proc_addresses_global(cast(rawptr)glfw.GetInstanceProcAddress)
 	createInstance()
 	return
 }
@@ -56,7 +56,7 @@ createInstance :: proc() {
 
 	createInfo.enabledLayerCount = 0
 
-	assert(vk.CreateInstance(&createInfo, nil, &instance) != vk.Result.SUCCESS, "vkCreateInstance failed!")
+	assert(vk.CreateInstance(&createInfo, nil, &instance) == .SUCCESS, "vkCreateInstance failed!")
 
 	return
 }
