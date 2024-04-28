@@ -2,6 +2,9 @@ package system
 
 import    "vendor:glfw"
 import vk "vendor:vulkan"
+import    "core:fmt"
+import    "base:runtime"
+import    "core:log"
 
 WIDTH : i32 : 800
 HEIGHT : i32 : 600
@@ -9,8 +12,12 @@ window : glfw.WindowHandle
 instance : vk.Instance
 ENABLE_VALIDATION_LAYER :: ODIN_DEBUG
 validationLayers : []string = { "VK_LAYER_KHRONOS_validation" }
+debugMessenger : vk.DebugUtilsMessengerEXT
+ctx : runtime.Context
 
 run :: proc() {
+	context.logger = log.create_console_logger()
+	ctx = context
 	initWindow()
 	initVulkan()
 	defer cleanUp()
@@ -30,6 +37,7 @@ initWindow :: proc() {
 initVulkan :: proc() {
 	vk.load_proc_addresses_global(cast(rawptr)glfw.GetInstanceProcAddress)
 	createInstance()
+	setupDebugMessenger()
 	return
 }
 
@@ -50,8 +58,8 @@ createInstance :: proc() {
 	createInfo : vk.InstanceCreateInfo = {}
 	createInfo.sType = vk.StructureType.INSTANCE_CREATE_INFO
 	createInfo.pApplicationInfo = &appInfo
-	
-	extensions := glfw.GetRequiredInstanceExtensions()
+
+	extensions := getRequiredExtensions()
 	glfwExtensionCount := u32(len(extensions))
 	glfwExtensions : [^]cstring = raw_data(extensions)
 
@@ -98,6 +106,37 @@ checkValidationLayers :: proc() -> (result := false) {
 	return
 }
 
+getRequiredExtensions :: proc() -> (extensions : [dynamic]cstring) {
+	exts := glfw.GetRequiredInstanceExtensions()
+	for ext in exts {
+		append_elem(&extensions, ext)
+	}
+	if ENABLE_VALIDATION_LAYER {
+		append_elem(&extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
+	}
+	return
+}
+
+debugCallback :: proc(messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, messageTypes: vk.DebugUtilsMessageTypeFlagsEXT, pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) -> (result : b32 = false) {
+	context = context
+	fmt.printfln("Validation layer: %s", pCallbackData.pMessage)
+	return
+}
+
+setupDebugMessenger :: proc() {
+	if !ENABLE_VALIDATION_LAYER do return
+	createInfo : vk.DebugUtilsMessengerCreateInfoEXT
+	populateDebugMessengerCreateInfo(&createInfo)
+	assert(vk.CreateDebugUtilsMessengerEXT(instance, &createInfo, nil, &debugMessenger) == .SUCCESS, "failed to setup debug messenger")
+}
+
+populateDebugMessengerCreateInfo :: proc(createInfo : ^vk.DebugUtilsMessengerCreateInfoEXT) {
+	createInfo.sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT
+	createInfo.messageSeverity |= { .ERROR, .WARNING, .VERBOSE }
+	createInfo.messageType |= { .GENERAL, .VALIDATION, .PERFORMANCE }
+	createInfo.pfnUserCallback = auto_cast debugCallback
+}
+
 mainLoop :: proc() {
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents()
@@ -106,6 +145,9 @@ mainLoop :: proc() {
 }
 
 cleanUp :: proc() {
+	if ENABLE_VALIDATION_LAYER {
+		vk.DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nil)
+	}
 	vk.DestroyInstance(instance, nil)
 	glfw.DestroyWindow(window)
 	glfw.Terminate()
