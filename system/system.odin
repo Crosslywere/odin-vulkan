@@ -14,6 +14,7 @@ ENABLE_VALIDATION_LAYER :: ODIN_DEBUG
 validationLayers : []string = { "VK_LAYER_KHRONOS_validation" }
 debugMessenger : vk.DebugUtilsMessengerEXT
 ctx : runtime.Context
+physicalDevice : vk.PhysicalDevice
 
 run :: proc() {
 	context.logger = log.create_console_logger()
@@ -38,6 +39,7 @@ initVulkan :: proc() {
 	vk.load_proc_addresses_global(cast(rawptr)glfw.GetInstanceProcAddress)
 	createInstance()
 	setupDebugMessenger()
+	pickPhysicalDevice()
 	return
 }
 
@@ -128,6 +130,7 @@ setupDebugMessenger :: proc() {
 	createInfo : vk.DebugUtilsMessengerCreateInfoEXT
 	populateDebugMessengerCreateInfo(&createInfo)
 	assert(vk.CreateDebugUtilsMessengerEXT(instance, &createInfo, nil, &debugMessenger) == .SUCCESS, "failed to setup debug messenger")
+	return
 }
 
 populateDebugMessengerCreateInfo :: proc(createInfo : ^vk.DebugUtilsMessengerCreateInfoEXT) {
@@ -135,6 +138,40 @@ populateDebugMessengerCreateInfo :: proc(createInfo : ^vk.DebugUtilsMessengerCre
 	createInfo.messageSeverity |= { .ERROR, .WARNING, .VERBOSE }
 	createInfo.messageType |= { .GENERAL, .VALIDATION, .PERFORMANCE }
 	createInfo.pfnUserCallback = auto_cast debugCallback
+	return
+}
+
+pickPhysicalDevice :: proc() {
+	deviceCount : u32
+	vk.EnumeratePhysicalDevices(instance, &deviceCount, nil)
+	if deviceCount == 0 do panic("failed to find a GPU that supports vulkan")
+	devices := make([]vk.PhysicalDevice, deviceCount)
+	vk.EnumeratePhysicalDevices(instance, &deviceCount, raw_data(devices))
+	score := 0
+	for i in 0 ..< deviceCount {
+		deviceScore := scoreDevice(devices[i])
+		if score < deviceScore {
+			score = deviceScore
+			physicalDevice = devices[i]
+		}
+	}
+	assert(physicalDevice != nil, "failed to find suitable GPU")
+	return
+}
+
+scoreDevice :: proc(device : vk.PhysicalDevice) -> (score : int = 0) {
+	if properties, features, result := isDeviceSuitable(device); result {
+		score += 1
+		// TODO: Score based on required features
+	}
+	return
+}
+
+isDeviceSuitable :: proc(device : vk.PhysicalDevice) -> (properties : vk.PhysicalDeviceProperties, features : vk.PhysicalDeviceFeatures, result : bool = false) {
+	vk.GetPhysicalDeviceProperties(device, &properties)
+	vk.GetPhysicalDeviceFeatures(device, &features)
+	result = auto_cast (features.geometryShader)
+	return
 }
 
 mainLoop :: proc() {
