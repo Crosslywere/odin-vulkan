@@ -2,12 +2,13 @@ package system
 
 import    "vendor:glfw"
 import vk "vendor:vulkan"
-import    "core:mem"
 
 WIDTH : i32 : 800
 HEIGHT : i32 : 600
 window : glfw.WindowHandle
 instance : vk.Instance
+ENABLE_VALIDATION_LAYER :: ODIN_DEBUG
+validationLayers : []string = { "VK_LAYER_KHRONOS_validation" }
 
 run :: proc() {
 	initWindow()
@@ -33,6 +34,9 @@ initVulkan :: proc() {
 }
 
 createInstance :: proc() {
+	if ENABLE_VALIDATION_LAYER && !checkValidationLayers() {
+		panic("vaildation layers requested, but not available")
+	}
 	// First we create the application info to be used in the create info
 	appInfo : vk.ApplicationInfo
 	appInfo.sType = vk.StructureType.APPLICATION_INFO
@@ -49,7 +53,7 @@ createInstance :: proc() {
 	
 	extensions := glfw.GetRequiredInstanceExtensions()
 	glfwExtensionCount := u32(len(extensions))
-	glfwExtensions : [^]cstring = mem.raw_data(extensions)
+	glfwExtensions : [^]cstring = raw_data(extensions)
 
 	createInfo.enabledExtensionCount = glfwExtensionCount
 	createInfo.ppEnabledExtensionNames = glfwExtensions
@@ -58,6 +62,39 @@ createInstance :: proc() {
 
 	assert(vk.CreateInstance(&createInfo, nil, &instance) == .SUCCESS, "vkCreateInstance failed!")
 
+	vk.load_proc_addresses_instance(instance)
+
+	return
+}
+
+checkValidationLayers :: proc() -> (result := false) {
+	layerCount : u32
+	vk.EnumerateInstanceLayerProperties(&layerCount, nil)
+	availableLayers := make([]vk.LayerProperties, layerCount)
+	vk.EnumerateInstanceLayerProperties(&layerCount, raw_data(availableLayers))
+	for validationLayer in validationLayers {
+		for layer in 0 ..< layerCount {
+			layerFound := false
+			for i := 0; i < len(validationLayer); {
+				if validationLayer[i] == availableLayers[layer].layerName[i] {
+					i += 1
+					if i == vk.MAX_DESCRIPTION_SIZE && i < len(validationLayer) {
+						break
+					}
+					if availableLayers[layer].layerName[i] == 0 {
+						layerFound = true
+						break
+					}
+					continue
+				}
+				break
+			}
+			if layerFound {
+				result = true
+				break
+			}
+		}
+	}
 	return
 }
 
